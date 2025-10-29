@@ -32,6 +32,7 @@ class PageButton:
                 print(f"PageButton task running... (iteration {counter})")
             
             # Check button state and handle events
+            # NOTE: Uncomment and implement _check_button_state() when integrating with actual hardware
             # await self._check_button_state()
             
             await asyncio.sleep(1)  # Check every second

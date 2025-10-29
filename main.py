@@ -15,6 +15,8 @@ async def main_async():
     print("Starting main_async...")
     
     # Create concurrent tasks
+    # NOTE: Tasks are intentionally not stored or awaited - they run indefinitely in background
+    # This is the fire-and-forget pattern recommended for long-running background tasks
     asyncio.create_task(page_btn.task())
     asyncio.create_task(task_display())
     

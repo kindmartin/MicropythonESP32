@@ -21,6 +21,7 @@ async def task_display():
             print(f"Display task running... (iteration {counter})")
         
         # Update display content
+        # NOTE: Uncomment and implement _update_display() when integrating with actual hardware
         # await _update_display()
         
         await asyncio.sleep(2)  # Update every 2 seconds
