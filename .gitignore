@@ -1,0 +1,31 @@
+# Secretos / red (usa los *.example.py como plantilla)
+wifi_config.py
+ipaddress.cfg
+*.pem
+*.key
+.env
+
+# Python / entornos
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Builds y binarios locales (los firmwares probados van en boards/<PLACA>/firmware/ a mano)
+build/
+build-*/
+*.zip
+*.directory
+.directory
+
+# Editor
+.vscode/
+*.code-workspace
+
+# Otros archivos con credenciales / respaldos de dispositivo
+wifi.cfg
+netb.py
+backup_original_*/
+
+# Credenciales congeladas en el firmware (plantilla en templates/secrets.example.py)
+frozen/secrets.py

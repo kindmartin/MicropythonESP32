@@ -1,0 +1,56 @@
+# Config de display + touch para lvgl_micropython (ver README.md de esta carpeta)
+[MCU.esp32]
+BOARD = "WAVESHARE_ESP32_S3_TOUCH_LCD_LVGL"
+flash_size = 16
+enable_jtag_repl = 'n'
+enable_cdc_repl = 'n'
+enable_uart_repl = 'y'
+uart_repl_bitrate = 115200
+
+[SPI.Bus.spi_bus]
+host = 1
+mosi = 38
+miso = 40
+sck = 39
+
+[SPIBus.display_bus]
+spi_bus = "spi_bus"
+freq = 40000000
+dc = 42
+cs = 45
+
+[I2C.Bus.i2c_bus]
+host = 0
+scl = 47
+sda = 48
+freq = 400000
+
+[I2C.Device.indev_device]
+bus = "i2c_bus"
+dev_id = "cst816s.I2C_ADDR"
+reg_bits = "cst816s.BITS"
+
+[ST7789.display]
+data_bus = "display_bus"
+display_width = 240
+display_height = 320
+backlight_pin = 1
+backlight_on_state = "st7789.STATE_PWM"
+color_space = "lv.COLOR_FORMAT.RGB565"
+color_byte_order = "st7789.BYTE_ORDER_BGR"
+rgb565_byte_swap = true
+
+[ST7789.display.init]
+params = []
+
+[CST816S.indev]
+device = "indev_device"
+
+[display.set_color_inversion]
+params = [true]
+
+[display.set_backlight]
+params = [80]
+
+[task_handler.TaskHandler]
+params = []

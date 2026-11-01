@@ -1,0 +1,5 @@
+{
+  "board": "WAVESHARE_ESP32_S3_TOUCH_LCD_2",
+  "role": "Segundo display del vehiculo (recibe telemetria por ESP-NOW)",
+  "notes": "Ver PROYECTO_WAVESHARE.md"
+}

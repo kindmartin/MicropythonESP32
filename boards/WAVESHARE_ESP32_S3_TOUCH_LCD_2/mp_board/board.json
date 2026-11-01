@@ -1,0 +1,11 @@
+{
+    "deploy": ["../deploy.md"],
+    "deploy_options": {"flash_offset": "0"},
+    "docs": "",
+    "features": ["BLE", "Display", "Touch", "External Flash", "External RAM", "USB", "WiFi", "Camera", "IMU", "microSD"],
+    "mcu": "esp32s3",
+    "product": "Waveshare ESP32-S3-Touch-LCD-2",
+    "thumbnail": "",
+    "url": "https://www.waveshare.com/esp32-s3-touch-lcd-2.htm",
+    "vendor": "Waveshare"
+}
