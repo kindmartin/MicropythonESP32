@@ -1,33 +1,36 @@
-# Overlay grafico sobre el frame de la camara (240x240 RGB565): bateria + horizonte tipo avion
-# (o nivel de burbuja) con el IMU. Dibuja con framebuf directamente en el buffer que va al LCD.
-# Sin texto (no hay fuente grande): todo es grafico.
+# Overlay grafico sobre el frame de la camara (240x240 RGB565): horizonte tipo avion + escala de cabeceo +
+# bateria, con el IMU. Dibuja con framebuf directamente en el buffer que va al LCD. Sin texto.
 #
-# Colores: el LCD recibe RGB565 big-endian y framebuf escribe little-endian -> c565() ya los intercambia.
-# Orientacion: VIEW_ROT dice como ves el panel respecto a su orientacion nativa (portrait); MIRROR_X compensa el
-# espejo en x que aplica el driver del LCD (los dibujos van al mismo buffer que la camara, que ya lo compensa con hmirror):
-#   0 = tal cual   90 = panel girado 90 grados contra reloj (franja de UI a tu derecha)   180 / 270
+# Elementos (todo en tu vista):
+#   - Horizonte artificial: linea que se inclina con el alabeo y se desplaza con el cabeceo, marcas de suelo,
+#     escala de cabeceo (+-10/20 grados) y simbolo fijo del avion en el centro. El horizonte se pone VERDE
+#     cuando alabeo y cabeceo estan ambos dentro de +-LEVEL_DEG (cian el resto del tiempo).
+#   - Arco de alabeo arriba con un puntero que apunta hacia el CIELO (verde nivelado, amarillo, rojo).
+#   - Escala VERTICAL de cabeceo a la derecha con un triangulo: alineado con el cero (y verde) = nivelado.
+#   - Flechas magenta a los lados SOLO mientras rotas (giroscopio): sentido horario / antihorario.
+#   - Bateria arriba a la derecha.
 #
-# Estilos (Overlay.style):
-#   "horizon": placa VERTICAL (como una camara/telefono). Horizonte artificial + arco de alabeo +
-#              flechas de giro (giroscopio).
-#   "bubble" : placa PLANA. Nivel de burbuja.
+# Cero (tare): Overlay.tare() toma el alabeo y cabeceo actuales como referencia (0 grados). Sirve si la pantalla
+# no esta a 90 sino a 110: pasa a medir como si estuviera a 90. Se guarda en ZERO_FILE y se recarga al arrancar.
 #
-# Mapeo del IMU a TU vista: 8 modos (Overlay.set_imu_mode), que se eligen con BOOT en video.py.
-#   bit0: intercambia ejes (0: horizontal=y, vertical=x    1: horizontal=x, vertical=y)
-#   bit1: invierte el signo horizontal     bit2: invierte el signo vertical
-# Ajustes finos (signos que dependen de como esta montado el IMU): PITCH_SIGN y GZ_SIGN.
+# Ejes del IMU en esta placa (medidos): +x = tu izquierda, +y = arriba, +z = hacia dentro de la pantalla
+# (con la placa apaisada y el video derecho). Gravedad en tu vista: dx = +ax, dy = +ay.
+# MIRROR_X: el driver del LCD aplica MADCTL MX (espejo en x) y la camara lo compensa con hmirror; el overlay
+# se dibuja en el mismo buffer, asi que _p() tambien lo compensa.
+# VIEW_ROT: como ves el panel respecto a su orientacion nativa (90 = franja de UI a tu derecha).
 import framebuf
 import math
+import time
 from array import array
 
 
 def c565(r, g, b):
+    # el LCD recibe RGB565 big-endian y framebuf escribe little-endian: se intercambian los bytes
     v = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
     return ((v & 0xFF) << 8) | (v >> 8)
 
 
 WHITE = c565(255, 255, 255)
-BLACK = c565(0, 0, 0)
 GREY = c565(120, 120, 120)
 GREEN = c565(0, 220, 0)
 YELLOW = c565(255, 200, 0)
@@ -35,36 +38,69 @@ RED = c565(255, 40, 40)
 CYAN = c565(0, 230, 230)
 MAGENTA = c565(255, 0, 255)
 
-MIRROR_X = True       # el driver del LCD usa MADCTL MX (espejo en x): se compensa al dibujar. La camara lo compensa con hmirror.
-IMU_MODE_DEFAULT = 7     # modo IMU 8: dx = +ax, dy = +ay (ejes del IMU: +x=izquierda, +y=arriba, +z=hacia dentro de la pantalla)
-PITCH_SIGN = 1       # +1: si inclinas la camara hacia arriba el horizonte debe BAJAR; si sube, pon -1
-GZ_SIGN = -1         # +z apunta hacia dentro de la pantalla: gz>0 = giro HORARIO visto por ti. Si las flechas salen al reves, pon 1
-PX_PER_DEG = 2.2     # desplazamiento del horizonte por grado de cabeceo
-PITCH_MAX = 50       # grados maximos de cabeceo que se dibujan
-GYRO_THRESHOLD = 12  # grados/s por debajo de los cuales no se muestran las flechas de giro
+MIRROR_X = True
+PITCH_SIGN = 1        # +1: az > 0 = la camara mira hacia arriba (el horizonte baja). Si sube, pon -1
+GZ_SIGN = -1          # +z mira hacia dentro de la pantalla: gz > 0 = giro HORARIO para ti. Si va al reves, pon 1
+PX_PER_DEG = 2.2      # desplazamiento del horizonte por grado de cabeceo
+PITCH_MAX = 50        # grados maximos de cabeceo que se dibujan en el horizonte
+LEVEL_DEG = 5         # el horizonte se pone verde si |alabeo| y |cabeceo| estan por debajo de esto
+GYRO_THRESHOLD = 12   # grados/s por debajo de los cuales no se muestran las flechas de giro
+SCALE_PX = 2.5        # px por grado en la escala vertical de cabeceo
+SCALE_MAX = 33        # grados que caben en la escala (+-)
+ZERO_FILE = "/imu_zero.txt"
 
 
 class Overlay:
-    def __init__(self, size=240, view_rot=90, style="horizon", mirror_x=MIRROR_X):
+    def __init__(self, size=240, view_rot=90, mirror_x=MIRROR_X):
         self.n = size
-        self.mx = mirror_x
         self.vr = view_rot
-        self.style = style
+        self.mx = mirror_x
         self.ax = self.ay = 0.0     # aceleracion filtrada (g) en los ejes del IMU
         self.az = 1.0
         self.gz = 0.0               # velocidad de giro filtrada alrededor de z (grados/s)
-        self.set_imu_mode(IMU_MODE_DEFAULT)
+        self._seeded = False        # el filtro arranca con la primera lectura (no desde 'placa plana')
+        self.roll0 = 0.0            # referencia de cero: alabeo (rad) y cabeceo (grados)
+        self.pitch0 = 0.0
+        self._flash_until = 0
+        self._flash_col = GREEN
+        self.load_zero()
 
-    def set_imu_mode(self, m):
-        self.imu_mode = m & 7
-        self.ix, self.iy = (0, 1) if m & 1 else (1, 0)
-        self.sx = 1 if m & 2 else -1
-        self.sy = 1 if m & 4 else -1
+    # ---- cero (tare)
+    def load_zero(self):
+        try:
+            with open(ZERO_FILE) as f:
+                a, b = f.read().split()
+            self.roll0, self.pitch0 = float(a), float(b)
+        except (OSError, ValueError):
+            pass
 
-    # ---- mapa vista (x der, y abajo, como lo ves) -> panel nativo
+    def save_zero(self):
+        try:
+            with open(ZERO_FILE, "w") as f:
+                f.write("%f %f" % (self.roll0, self.pitch0))
+        except OSError:
+            pass
+
+    def tare(self):
+        """Toma el alabeo/cabeceo actuales como cero. False si la placa esta casi plana (alabeo indefinido)."""
+        theta, pitch, m = self._attitude()
+        if m < 0.5:
+            return False
+        self.roll0, self.pitch0 = theta, pitch
+        self.save_zero()
+        return True
+
+    def reset_zero(self):
+        self.roll0 = self.pitch0 = 0.0
+        self.save_zero()
+
+    def flash(self, ok=True, ms=600):
+        """Marco verde (o rojo) un momento: confirmacion visual del boton."""
+        self._flash_until = time.ticks_add(time.ticks_ms(), ms)
+        self._flash_col = GREEN if ok else RED
+
+    # ---- mapa vista (x der, y abajo, como lo ves) -> coordenadas del BUFFER
     def _p(self, x, y):
-        """Coordenadas de tu vista -> coordenadas del BUFFER (no del panel fisico).
-        1) tu vista -> panel nativo segun VIEW_ROT.  2) el LCD espeja x (MADCTL MX): se invierte aqui."""
         n = self.n - 1
         if self.vr == 90:
             px, py = n - y, x
@@ -104,18 +140,33 @@ class Overlay:
 
     # ---- datos del IMU
     def update_imu(self, acc, gyro=None, alpha=0.25):
+        if not self._seeded:
+            self.ax, self.ay, self.az = acc[0], acc[1], acc[2]
+            self._seeded = True
+            return
         self.ax += alpha * (acc[0] - self.ax)
         self.ay += alpha * (acc[1] - self.ay)
         self.az += alpha * (acc[2] - self.az)
         if gyro is not None:
             self.gz += 0.4 * (gyro[2] - self.gz)
 
-    def _gravity(self):
-        """Proyeccion de la gravedad en TU pantalla (dx der, dy abajo), en g."""
-        a = (self.ax, self.ay, self.az)
-        return self.sx * a[self.ix], self.sy * a[self.iy]
+    def _attitude(self):
+        """(alabeo horario en rad, cabeceo en grados, modulo de la gravedad en el plano). Sin restar el cero."""
+        dx, dy = self.ax, self.ay                 # gravedad en tu vista
+        m = math.sqrt(dx * dx + dy * dy)
+        theta = math.atan2(dx, dy) if m > 0.2 else 0.0      # placa casi plana: alabeo indefinido -> 0
+        pitch = math.degrees(math.atan2(self.az * PITCH_SIGN, m if m > 0.05 else 0.05))
+        return theta, pitch, m
 
-    # ---- bateria
+    def _relative(self):
+        """Alabeo (rad) y cabeceo (grados) respecto al cero."""
+        theta, pitch, m = self._attitude()
+        if m > 0.2:
+            d = theta - self.roll0
+            theta = (d + math.pi) % (2 * math.pi) - math.pi      # envuelve a (-pi, pi]
+        return theta, pitch - self.pitch0
+
+    # ---- elementos
     def battery(self, fb, pct, present=True):
         x, y = 196, 8                       # arriba a la derecha (en tu vista)
         self.rect(fb, x, y, 34, 16, WHITE)
@@ -129,46 +180,22 @@ class Overlay:
         if w > 0:
             self.rect(fb, x + 2, y + 2, w, 12, col, True)
 
-    # ---- estilo "bubble" (placa plana)
-    def bubble(self, fb):
-        cx, cy, r = 36, 204, 28              # abajo a la izquierda (en tu vista)
-        dx, dy = self._gravity()
-        px, py = dx * r, dy * r              # 1 g = radio completo
-        m = (px * px + py * py) ** 0.5
-        lim = r - 5
-        if m > lim:
-            px, py = px * lim / m, py * lim / m
-        tilt = min(1.0, (dx * dx + dy * dy) ** 0.5)
-        col = GREEN if tilt < 0.05 else (YELLOW if tilt < 0.3 else RED)
-        self.circle(fb, cx, cy, r, WHITE)
-        self.circle(fb, cx, cy, r // 2, GREY)
-        self.line(fb, cx - r, cy, cx + r, cy, GREY)
-        self.line(fb, cx, cy - r, cx, cy + r, GREY)
-        self.circle(fb, cx + px, cy + py, 5, col, True)
-
-    # ---- estilo "horizon" (placa vertical): horizonte artificial tipo avion
-    def horizon(self, fb):
+    def horizon(self, fb, theta, pitch):
         c0 = self.n // 2
-        dx, dy = self._gravity()
-        m = math.sqrt(dx * dx + dy * dy)
-        # alabeo (theta, horario +): angulo de la gravedad respecto a "abajo de la pantalla".
-        # Placa casi plana (m pequeno): el alabeo no esta definido -> horizonte nivelado.
-        theta = math.atan2(dx, dy) if m > 0.2 else 0.0
-        pitch = math.degrees(math.atan2(self.az * PITCH_SIGN, m if m > 0.05 else 0.05))
-        pitch = max(-PITCH_MAX, min(PITCH_MAX, pitch))   # limita el desplazamiento: el horizonte no se pierde
+        roll_deg = math.degrees(theta)
+        level = abs(roll_deg) < LEVEL_DEG and abs(pitch) < LEVEL_DEG
+        hcol = GREEN if level else CYAN                 # verde: alabeo y cabeceo dentro de +-LEVEL_DEG
+        pitch_c = max(-PITCH_MAX, min(PITCH_MAX, pitch))     # el horizonte no se sale de la pantalla
         s, c = math.sin(theta), math.cos(theta)
         # vectores unitarios en tu vista: h = a lo largo del horizonte (c, -s); g = hacia el suelo (s, c)
-        off = pitch * PX_PER_DEG                      # camara hacia arriba -> horizonte baja (hacia el suelo)
+        off = pitch_c * PX_PER_DEG                    # camara hacia arriba -> horizonte baja (hacia el suelo)
         hx, hy = c0 + s * off, c0 + c * off
-        # horizonte: dos segmentos con hueco en el centro
-        for sg in (-1, 1):
-            self.line(fb, hx + sg * c * 24, hy - sg * s * 24, hx + sg * c * 110, hy - sg * s * 110, CYAN)
-        # marcas de suelo (hacia donde cae la gravedad)
-        for t in (-80, -45, 45, 80):
+        for sg in (-1, 1):                             # horizonte: dos segmentos con hueco central
+            self.line(fb, hx + sg * c * 24, hy - sg * s * 24, hx + sg * c * 110, hy - sg * s * 110, hcol)
+        for t in (-80, -45, 45, 80):                   # marcas de suelo
             bx, by = hx + t * c, hy - t * s
-            self.line(fb, bx, by, bx + s * 9, by + c * 9, CYAN)
-        # escala de cabeceo: lineas a +-10 y +-20 grados (arriba = hacia el cielo)
-        for ang in (-20, -10, 10, 20):
+            self.line(fb, bx, by, bx + s * 9, by + c * 9, hcol)
+        for ang in (-20, -10, 10, 20):                 # escala de cabeceo (arriba = cielo)
             px = hx - s * ang * PX_PER_DEG
             py = hy - c * ang * PX_PER_DEG
             ln = 22 if ang % 20 == 0 else 14
@@ -186,30 +213,51 @@ class Overlay:
             ln = 10 if a % 30 == 0 else 5
             self.line(fb, c0 + R * math.sin(r), c0 - R * math.cos(r),
                       c0 + (R - ln) * math.sin(r), c0 - (R - ln) * math.cos(r), WHITE)
-        roll_deg = math.degrees(theta)
         col = GREEN if abs(roll_deg) < 10 else (YELLOW if abs(roll_deg) < 30 else RED)
         sk = max(-math.radians(75), min(math.radians(75), -theta))     # el cielo se ve girado al reves
         tip = (c0 + (R - 12) * math.sin(sk), c0 - (R - 12) * math.cos(sk))
         b1 = (c0 + (R + 2) * math.sin(sk - 0.07), c0 - (R + 2) * math.cos(sk - 0.07))
         b2 = (c0 + (R + 2) * math.sin(sk + 0.07), c0 - (R + 2) * math.cos(sk + 0.07))
         self.tri(fb, tip, b1, b2, col)
-        # flechas de giro (solo mientras rotas): sentido horario/antihorario segun el giroscopio
+
+    def pitch_scale(self, fb, pitch):
+        """Escala vertical a la derecha: el triangulo marca el cabeceo; alineado con el cero (amarillo) = nivelado."""
+        x, z = 226, self.n // 2
+        self.line(fb, x, z - int(SCALE_MAX * SCALE_PX), x, z + int(SCALE_MAX * SCALE_PX), GREY)
+        for deg in range(-30, 31, 5):
+            y = z - deg * SCALE_PX
+            if deg == 0:
+                self.line(fb, x - 14, y, x + 3, y, YELLOW)
+            else:
+                self.line(fb, x - (8 if deg % 10 == 0 else 4), y, x, y, WHITE)
+        p = max(-SCALE_MAX, min(SCALE_MAX, pitch))
+        y = z - p * SCALE_PX
+        col = GREEN if abs(pitch) < 2 else (YELLOW if abs(pitch) < 10 else RED)
+        self.tri(fb, (x - 7, y), (x - 21, y - 8), (x - 21, y + 8), col)
+
+    def turn_arrows(self, fb):
+        """Flechas magenta mientras rotas (giroscopio): derecha baja + izquierda sube = horario."""
         rate_cw = -self.gz * GZ_SIGN
-        if abs(rate_cw) > GYRO_THRESHOLD:
-            k = int(min(14, 6 + abs(rate_cw) / 14))
-            cw = rate_cw > 0
-            # lado derecho: horario baja, antihorario sube; lado izquierdo: al reves
-            for side, up in ((c0 + 100, not cw), (c0 - 100, cw)):
-                if up:
-                    self.tri(fb, (side - k, c0 + k), (side + k, c0 + k), (side, c0 - k), MAGENTA)
-                else:
-                    self.tri(fb, (side - k, c0 - k), (side + k, c0 - k), (side, c0 + k), MAGENTA)
+        if abs(rate_cw) <= GYRO_THRESHOLD:
+            return
+        c0 = self.n // 2
+        k = int(min(13, 6 + abs(rate_cw) / 14))
+        cw = rate_cw > 0
+        for side, up in ((c0 + 70, not cw), (c0 - 70, cw)):
+            if up:
+                self.tri(fb, (side - k, c0 + k), (side + k, c0 + k), (side, c0 - k), MAGENTA)
+            else:
+                self.tri(fb, (side - k, c0 - k), (side + k, c0 - k), (side, c0 + k), MAGENTA)
 
     def draw(self, buf, pct, present=True):
-        """Dibuja bateria + horizonte (o burbuja) sobre buf (bytearray/memoryview escribible 240x240 RGB565)."""
+        """Dibuja el overlay sobre buf (bytearray/memoryview escribible 240x240 RGB565)."""
         fb = framebuf.FrameBuffer(buf, self.n, self.n, framebuf.RGB565)
-        if self.style == "bubble":
-            self.bubble(fb)
-        else:
-            self.horizon(fb)
+        theta, pitch = self._relative()
+        self.horizon(fb, theta, pitch)
+        self.pitch_scale(fb, pitch)
+        self.turn_arrows(fb)
         self.battery(fb, pct, present)
+        if time.ticks_diff(self._flash_until, time.ticks_ms()) > 0:      # confirmacion del boton
+            self.rect(fb, 0, 0, self.n, self.n, self._flash_col)
+            self.rect(fb, 1, 1, self.n - 2, self.n - 2, self._flash_col)
+            self.rect(fb, 2, 2, self.n - 4, self.n - 4, self._flash_col)

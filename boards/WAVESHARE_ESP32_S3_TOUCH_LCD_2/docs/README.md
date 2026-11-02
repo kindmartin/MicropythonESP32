@@ -201,33 +201,38 @@ SPI del LCD a 40 MHz, ~24 fps (limite de la camara). Resultados de la puesta a p
 - El hilo FTP (`netutils/ftp_thread.py`) se cae en bucle y llena el REPL de errores: un `main.py` vacio +
   `import r` (reinicio) evita que arranque y deja `mpremote` usable.
 
-## 6. Overlay de IMU y bateria sobre el video (`examples/video.py` + `examples/overlay.py`)
+## 6. Video con horizonte tipo avion (`examples/video.py` + `examples/overlay.py`)
 
 ```python
 import video
-video.run()                        # horizonte tipo avion + bateria sobre el video
-video.run(style="bubble")          # nivel de burbuja (placa plana)
-video.run(boot_action="video")     # BOOT recorre las orientaciones del video
+video.run()                  # video + overlay; al salir vuelve al prompt, se puede repetir sin reiniciar
+video.run(overlay_on=False)  # solo video
 ```
 
-- **Salir:** pulsacion larga de BOOT (1,5 s), tecla `q`, o Ctrl-C. `run()` se puede repetir sin reiniciar.
-- **Horizonte (`style="horizon"`, placa vertical):** linea que se inclina con el alabeo y se desplaza con el cabeceo,
-  marcas de suelo, escala de cabeceo, simbolo fijo del avion, arco de alabeo con puntero hacia el cielo y flechas
-  magenta que indican el sentido de giro (giroscopio) mientras rotas. Sin texto: todo grafico.
-- **Por que solo 2 ejes:** el acelerometro solo da alabeo y cabeceo (la gravedad tiene 2 grados de libertad). El tercero
-  (rumbo/yaw) no sale del acelerometro; las flechas usan el giroscopio (velocidad, no angulo).
-- **Ejes del IMU (QMI8658) en esta placa, medidos con lecturas reales** (placa derecha, vista como para el video):
-  +x apunta a tu **izquierda**, +y **arriba** y +z **hacia dentro de la pantalla** (plana con la pantalla arriba, az = -0,97 g).
-  El acelerometro mide +1 g en el eje que apunta hacia arriba. Por eso la proyeccion de la gravedad en tu vista es
-  **dx = +ax, dy = +ay**: es el **modo 8** (indice 7), fijado por defecto (`IMU_MODE` en `video.py`, `IMU_MODE_DEFAULT` en `overlay.py`).
-  (El modo 4 que se eligio primero con la burbuja daba dy = -ay: con la placa derecha calculaba un alabeo de ~178 grados.)
-- **Espejo del LCD (`MIRROR_X`):** el driver del LCD arranca con MADCTL MX (espejo en x) y la camara lo compensa con
-  `hmirror`. El overlay se dibuja en el mismo buffer, asi que `Overlay._p()` tambien lo compensa; sin eso todo el dibujo
-  salia volteado en vertical (bateria abajo, flechas de giro invertidas) y parecia que "cerraba" otro modo del IMU.
-- **Mapeo del IMU a la vista (8 modos, BOOT corto):** solo hace falta si se monta el IMU o la pantalla de otra forma.
-- **Signos:** `GZ_SIGN = -1` (+z mira hacia dentro de la pantalla, asi que gz > 0 es giro horario para ti) y
-  `PITCH_SIGN = +1` (az > 0 = la camara mira hacia arriba, el horizonte baja; supone la camara en la cara posterior). Ambos
-  deducidos de las lecturas; confirmalos mirando las flechas y el cabeceo.
-- **Bateria:** icono con relleno y color segun el %; tachado si el voltaje es < 2,8 V (sin bateria, solo USB).
-- `VIEW_ROT = 90` en `video.py` supone el panel girado 90 grados contra reloj respecto a su orientacion nativa
-  (franja de UI a la derecha); cambia si montas la pantalla de otra forma.
+- **BOOT corto: pone a cero** el alabeo y el cabeceo actuales (se guarda en `/imu_zero.txt` y se recarga al arrancar).
+  Sirve si la pantalla esta a 110 grados y no a 90: pasa a medir como si estuviera a 90. Marco verde = hecho; marco rojo =
+  placa casi plana, el alabeo no esta definido y no se puede.
+- **BOOT largo (1,5 s)**, tecla `q` o Ctrl-C: salir.
+- **Horizonte** (cian; **verde** cuando |alabeo| y |cabeceo| < `LEVEL_DEG` = 5 grados): se inclina con el alabeo y se
+  desplaza con el cabeceo; marcas de suelo, escala de cabeceo (+-10/20), simbolo fijo del avion en el centro.
+- **Arco de alabeo** arriba con un puntero hacia el cielo (verde < 10 grados, amarillo < 30, rojo).
+- **Escala vertical de cabeceo** a la derecha: el triangulo alineado con el cero amarillo y en verde = nivelado.
+- **Flechas magenta** a los lados solo mientras rotas (giroscopio): derecha abajo + izquierda arriba = horario.
+- **Bateria** arriba a la derecha (relleno y color segun el %; tachada si V < 2,8, sin bateria).
+- Todo es grafico (no hay fuente grande). Se dibuja con `framebuf` en el mismo buffer que va al LCD (~1 ms).
+
+**Por que solo 2 ejes:** el acelerometro solo da alabeo y cabeceo (la gravedad tiene 2 grados de libertad). El tercero
+(rumbo) no sale del acelerometro; las flechas usan el giroscopio (velocidad, no angulo).
+
+**Ejes del IMU (QMI8658) en esta placa, medidos con lecturas reales** (placa apaisada, video derecho): +x a tu izquierda,
++y arriba, +z hacia dentro de la pantalla (plana con la pantalla arriba, az = -0,97 g). El acelerometro mide +1 g en el eje
+que apunta hacia arriba, asi que la gravedad en tu vista es dx = +ax, dy = +ay. Con la placa de pie (vertical) la gravedad
+cae en +x: el overlay mide el alabeo **respecto a la postura del video** (apaisada); para otra postura usa el cero.
+
+**Espejo del LCD (`MIRROR_X`):** el driver arranca con MADCTL MX (espejo en x); la camara lo compensa con `hmirror` y
+`Overlay._p()` lo compensa al dibujar. Sin eso todo el dibujo salia volteado en vertical (bateria abajo, flechas invertidas).
+
+**Signos** (en `overlay.py`): `GZ_SIGN = -1` (+z mira hacia dentro: gz > 0 es giro horario para ti) y `PITCH_SIGN = +1`
+(az > 0 = la camara mira hacia arriba y el horizonte baja; supone la camara en la cara posterior). Deducidos de las
+lecturas; confirmalos mirando las flechas y el cabeceo. `VIEW_ROT = 90` en `video.py` supone el panel girado 90 grados
+contra reloj respecto a su orientacion nativa (franja de UI a la derecha).
