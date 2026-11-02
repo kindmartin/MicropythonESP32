@@ -200,3 +200,26 @@ SPI del LCD a 40 MHz, ~24 fps (limite de la camara). Resultados de la puesta a p
   volcado de frames crudos por serie pierde datos. Para analizar un frame: volcar un muestreo reducido con CRC por linea.
 - El hilo FTP (`netutils/ftp_thread.py`) se cae en bucle y llena el REPL de errores: un `main.py` vacio +
   `import r` (reinicio) evita que arranque y deja `mpremote` usable.
+
+## 6. Overlay de IMU y bateria sobre el video (`examples/video.py` + `examples/overlay.py`)
+
+```python
+import video
+video.run()                        # horizonte tipo avion + bateria sobre el video
+video.run(style="bubble")          # nivel de burbuja (placa plana)
+video.run(boot_action="video")     # BOOT recorre las orientaciones del video
+```
+
+- **Salir:** pulsacion larga de BOOT (1,5 s), tecla `q`, o Ctrl-C. `run()` se puede repetir sin reiniciar.
+- **Horizonte (`style="horizon"`, placa vertical):** linea que se inclina con el alabeo y se desplaza con el cabeceo,
+  marcas de suelo, escala de cabeceo, simbolo fijo del avion, arco de alabeo con puntero hacia el cielo y flechas
+  magenta que indican el sentido de giro (giroscopio) mientras rotas. Sin texto: todo grafico.
+- **Por que solo 2 ejes:** el acelerometro solo da alabeo y cabeceo (la gravedad tiene 2 grados de libertad). El tercero
+  (rumbo/yaw) no sale del acelerometro; las flechas usan el giroscopio (velocidad, no angulo).
+- **Mapeo del IMU a la vista (8 modos, BOOT corto):** en esta placa el correcto es el **modo 4** (indice 3: horizontal =
+  eje x +, vertical = eje y -), ya fijado por defecto (`IMU_MODE` en `video.py`, `IMU_MODE_DEFAULT` en `overlay.py`).
+- **Pendientes de calibrar en hardware:** `PITCH_SIGN` (si subes la camara el horizonte debe bajar) y `GZ_SIGN` (giro
+  horario -> flechas horarias), en `overlay.py`.
+- **Bateria:** icono con relleno y color segun el %; tachado si el voltaje es < 2,8 V (sin bateria, solo USB).
+- `VIEW_ROT = 90` en `video.py` supone el panel girado 90 grados contra reloj respecto a su orientacion nativa
+  (franja de UI a la derecha); cambia si montas la pantalla de otra forma.
