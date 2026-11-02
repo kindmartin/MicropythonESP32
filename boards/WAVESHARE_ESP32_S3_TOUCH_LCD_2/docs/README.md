@@ -221,6 +221,9 @@ video.run(boot_action="video")     # BOOT recorre las orientaciones del video
   El acelerometro mide +1 g en el eje que apunta hacia arriba. Por eso la proyeccion de la gravedad en tu vista es
   **dx = +ax, dy = +ay**: es el **modo 8** (indice 7), fijado por defecto (`IMU_MODE` en `video.py`, `IMU_MODE_DEFAULT` en `overlay.py`).
   (El modo 4 que se eligio primero con la burbuja daba dy = -ay: con la placa derecha calculaba un alabeo de ~178 grados.)
+- **Espejo del LCD (`MIRROR_X`):** el driver del LCD arranca con MADCTL MX (espejo en x) y la camara lo compensa con
+  `hmirror`. El overlay se dibuja en el mismo buffer, asi que `Overlay._p()` tambien lo compensa; sin eso todo el dibujo
+  salia volteado en vertical (bateria abajo, flechas de giro invertidas) y parecia que "cerraba" otro modo del IMU.
 - **Mapeo del IMU a la vista (8 modos, BOOT corto):** solo hace falta si se monta el IMU o la pantalla de otra forma.
 - **Signos:** `GZ_SIGN = -1` (+z mira hacia dentro de la pantalla, asi que gz > 0 es giro horario para ti) y
   `PITCH_SIGN = +1` (az > 0 = la camara mira hacia arriba, el horizonte baja; supone la camara en la cara posterior). Ambos

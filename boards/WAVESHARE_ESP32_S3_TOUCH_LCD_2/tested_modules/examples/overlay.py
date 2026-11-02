@@ -3,7 +3,8 @@
 # Sin texto (no hay fuente grande): todo es grafico.
 #
 # Colores: el LCD recibe RGB565 big-endian y framebuf escribe little-endian -> c565() ya los intercambia.
-# Orientacion: VIEW_ROT dice como ves el panel respecto a su orientacion nativa (portrait):
+# Orientacion: VIEW_ROT dice como ves el panel respecto a su orientacion nativa (portrait); MIRROR_X compensa el
+# espejo en x que aplica el driver del LCD (los dibujos van al mismo buffer que la camara, que ya lo compensa con hmirror):
 #   0 = tal cual   90 = panel girado 90 grados contra reloj (franja de UI a tu derecha)   180 / 270
 #
 # Estilos (Overlay.style):
@@ -34,6 +35,7 @@ RED = c565(255, 40, 40)
 CYAN = c565(0, 230, 230)
 MAGENTA = c565(255, 0, 255)
 
+MIRROR_X = True       # el driver del LCD usa MADCTL MX (espejo en x): se compensa al dibujar. La camara lo compensa con hmirror.
 IMU_MODE_DEFAULT = 7     # modo IMU 8: dx = +ax, dy = +ay (ejes del IMU: +x=izquierda, +y=arriba, +z=hacia dentro de la pantalla)
 PITCH_SIGN = 1       # +1: si inclinas la camara hacia arriba el horizonte debe BAJAR; si sube, pon -1
 GZ_SIGN = -1         # +z apunta hacia dentro de la pantalla: gz>0 = giro HORARIO visto por ti. Si las flechas salen al reves, pon 1
@@ -43,8 +45,9 @@ GYRO_THRESHOLD = 12  # grados/s por debajo de los cuales no se muestran las flec
 
 
 class Overlay:
-    def __init__(self, size=240, view_rot=90, style="horizon"):
+    def __init__(self, size=240, view_rot=90, style="horizon", mirror_x=MIRROR_X):
         self.n = size
+        self.mx = mirror_x
         self.vr = view_rot
         self.style = style
         self.ax = self.ay = 0.0     # aceleracion filtrada (g) en los ejes del IMU
@@ -60,14 +63,20 @@ class Overlay:
 
     # ---- mapa vista (x der, y abajo, como lo ves) -> panel nativo
     def _p(self, x, y):
+        """Coordenadas de tu vista -> coordenadas del BUFFER (no del panel fisico).
+        1) tu vista -> panel nativo segun VIEW_ROT.  2) el LCD espeja x (MADCTL MX): se invierte aqui."""
         n = self.n - 1
         if self.vr == 90:
-            return n - y, x
-        if self.vr == 180:
-            return n - x, n - y
-        if self.vr == 270:
-            return y, n - x
-        return x, y
+            px, py = n - y, x
+        elif self.vr == 180:
+            px, py = n - x, n - y
+        elif self.vr == 270:
+            px, py = y, n - x
+        else:
+            px, py = x, y
+        if self.mx:
+            px = n - px
+        return px, py
 
     def rect(self, fb, x, y, w, h, c, fill=False):
         x0, y0 = self._p(x, y)
