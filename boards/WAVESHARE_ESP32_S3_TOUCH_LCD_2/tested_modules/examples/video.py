@@ -25,7 +25,7 @@ from camera import Camera, PixelFormat, FrameSize
 #   bit2: girar 90 a favor del reloj en software (mas lento)
 MODE = 2              # 2 = espejo horizontal (modo 3, confirmado: se ve derecho)
 BOOT_ACTION = "imu"   # que recorre BOOT: "imu" (8 mapeos de la burbuja) o "video" (8 orientaciones)
-IMU_MODE = 3          # mapeo del IMU confirmado en la placa: "modo IMU 4" (horizontal=eje x +, vertical=eje y -)
+IMU_MODE = 7          # modo IMU 8 (indice 7): horizontal=eje x +, vertical=eje y +  (medido con lecturas reales del IMU)
 OVERLAY = True        # bateria + horizonte/burbuja dibujados SOBRE el video (ver overlay.py)
 STYLE = "horizon"     # "horizon" (placa vertical, tipo avion) o "bubble" (placa plana)
 VIEW_ROT = 90         # como ves el panel respecto a su orientacion nativa (90 = franja de UI a tu derecha)

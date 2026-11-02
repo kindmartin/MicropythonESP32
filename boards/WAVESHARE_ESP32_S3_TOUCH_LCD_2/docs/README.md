@@ -216,10 +216,15 @@ video.run(boot_action="video")     # BOOT recorre las orientaciones del video
   magenta que indican el sentido de giro (giroscopio) mientras rotas. Sin texto: todo grafico.
 - **Por que solo 2 ejes:** el acelerometro solo da alabeo y cabeceo (la gravedad tiene 2 grados de libertad). El tercero
   (rumbo/yaw) no sale del acelerometro; las flechas usan el giroscopio (velocidad, no angulo).
-- **Mapeo del IMU a la vista (8 modos, BOOT corto):** en esta placa el correcto es el **modo 4** (indice 3: horizontal =
-  eje x +, vertical = eje y -), ya fijado por defecto (`IMU_MODE` en `video.py`, `IMU_MODE_DEFAULT` en `overlay.py`).
-- **Pendientes de calibrar en hardware:** `PITCH_SIGN` (si subes la camara el horizonte debe bajar) y `GZ_SIGN` (giro
-  horario -> flechas horarias), en `overlay.py`.
+- **Ejes del IMU (QMI8658) en esta placa, medidos con lecturas reales** (placa derecha, vista como para el video):
+  +x apunta a tu **izquierda**, +y **arriba** y +z **hacia dentro de la pantalla** (plana con la pantalla arriba, az = -0,97 g).
+  El acelerometro mide +1 g en el eje que apunta hacia arriba. Por eso la proyeccion de la gravedad en tu vista es
+  **dx = +ax, dy = +ay**: es el **modo 8** (indice 7), fijado por defecto (`IMU_MODE` en `video.py`, `IMU_MODE_DEFAULT` en `overlay.py`).
+  (El modo 4 que se eligio primero con la burbuja daba dy = -ay: con la placa derecha calculaba un alabeo de ~178 grados.)
+- **Mapeo del IMU a la vista (8 modos, BOOT corto):** solo hace falta si se monta el IMU o la pantalla de otra forma.
+- **Signos:** `GZ_SIGN = -1` (+z mira hacia dentro de la pantalla, asi que gz > 0 es giro horario para ti) y
+  `PITCH_SIGN = +1` (az > 0 = la camara mira hacia arriba, el horizonte baja; supone la camara en la cara posterior). Ambos
+  deducidos de las lecturas; confirmalos mirando las flechas y el cabeceo.
 - **Bateria:** icono con relleno y color segun el %; tachado si el voltaje es < 2,8 V (sin bateria, solo USB).
 - `VIEW_ROT = 90` en `video.py` supone el panel girado 90 grados contra reloj respecto a su orientacion nativa
   (franja de UI a la derecha); cambia si montas la pantalla de otra forma.

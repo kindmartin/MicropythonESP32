@@ -34,9 +34,9 @@ RED = c565(255, 40, 40)
 CYAN = c565(0, 230, 230)
 MAGENTA = c565(255, 0, 255)
 
-IMU_MODE_DEFAULT = 3     # confirmado: "modo IMU 4" (indice 3)
+IMU_MODE_DEFAULT = 7     # modo IMU 8: dx = +ax, dy = +ay (ejes del IMU: +x=izquierda, +y=arriba, +z=hacia dentro de la pantalla)
 PITCH_SIGN = 1       # +1: si inclinas la camara hacia arriba el horizonte debe BAJAR; si sube, pon -1
-GZ_SIGN = 1          # +1: giro horario (visto por ti) -> flechas horarias; si salen al reves, pon -1
+GZ_SIGN = -1         # +z apunta hacia dentro de la pantalla: gz>0 = giro HORARIO visto por ti. Si las flechas salen al reves, pon 1
 PX_PER_DEG = 2.2     # desplazamiento del horizonte por grado de cabeceo
 PITCH_MAX = 50       # grados maximos de cabeceo que se dibujan
 GYRO_THRESHOLD = 12  # grados/s por debajo de los cuales no se muestran las flechas de giro
