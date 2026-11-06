@@ -236,3 +236,47 @@ cae en +x: el overlay mide el alabeo **respecto a la postura del video** (apaisa
 (az > 0 = la camara mira hacia arriba y el horizonte baja; supone la camara en la cara posterior). Deducidos de las
 lecturas; confirmalos mirando las flechas y el cabeceo. `VIEW_ROT = 90` en `video.py` supone el panel girado 90 grados
 contra reloj respecto a su orientacion nativa (franja de UI a la derecha).
+
+## 7. Ejemplo sin camara: bola rodante (`docs/ejemplos/bola_tactil.py`)
+
+Combina LCD + IMU + touch + boton BOOT en pantalla completa portrait 240x320 (framebuf RGB565 + `blit_buffer`):
+la bola rueda segun la inclinacion (QMI8658), rebota en los bordes y en obstaculos que colocas tocando la pantalla
+(CST816D). BOOT corto borra obstaculos; BOOT largo, `q` o Ctrl-C salen.
+
+```python
+# copia board.py, st7789.py, cst816.py, qmi8658.py y bola_tactil.py a la placa
+import bola_tactil
+bola_tactil.run()
+```
+
+**Sin probar en hardware.** Signos de ejes en las constantes `SIGN_X`, `SIGN_Y`, `SWAP_XY` (si la bola rueda al reves o
+de lado). Misma trampa que `overlay.py`: el LCD aplica MX, asi que se dibuja espejado en x (`MIRROR_X`) y el texto de
+`framebuf` saldria al reves (por eso los fps van por consola). El touch solo responde al tocar (ver nota del CST816D).
+
+## 8. Paquete `horizon` (video + horizonte en hilo con asyncio)
+
+`tested_modules/horizon/` (copiar la carpeta entera a la placa) empaqueta `video.py` + `overlay.py` como servicio en segundo plano:
+un hilo (`_thread`) ejecuta un loop `asyncio`, asi que el REPL queda libre.
+
+```python
+import horizon
+horizon.start()               # segundo plano;  start(reload=True) recarga plugins tras editarlos
+horizon.status()              # {'running': True, 'fps': ..., 'bat_pct': ...}
+horizon.stop()                # tambien BOOT largo (1,5 s); BOOT corto = cero de alabeo/cabeceo
+horizon.enable_autostart()    # escribe main.py (solo si falta o esta vacio); disable_autostart() lo deja vacio
+horizon.config(overlay=False) # ajustes en /horizon.json (ver DEFAULT en horizon/app.py)
+```
+
+Arquitectura: `app.py` es el nucleo (hilo, supervisor, eventos, capas, config) y no sabe nada de hardware. Cada funcion es un
+plugin `plugins/<nombre>.py` con `setup(app)`: `imu`, `battery`, `button`, `video` (orden en `cfg["plugins"]`). Un plugin puede
+`app.add_task(nombre, corutina)`, `app.add_layer(fn(ov, fb))` para dibujar sobre el frame, `app.on("button_short", fn)`,
+`app.on_stop(fn)` y compartir datos en `app.state`. Para anadir una funcion (touch, SD, UI en la franja 240x80...) basta un
+fichero nuevo y su nombre en `plugins`. Una tarea marcada en `cfg["critical"]` (video) para todo si muere.
+
+**Modos y boton** (libreria `buttons.py`, copiarla tambien a la placa): `horizon` (camara + horizonte) y `ball` (bola rodante,
+plugin `plugins/ball.py`, ejes en `cfg["ball"]`). Un solo BOOT: corto = cero del horizonte / reiniciar nivel de la bola;
+**doble = alternar modo**; largo (o extra) = parar el hilo. En la bola: tocar = obstaculo, deslizar el dedo arriba/abajo =
+bola mas pesada/ligera (3 niveles). `horizon.start(mode='ball')` / `horizon.mode('ball')` desde el REPL. Al salir de un modo
+suelta su recurso (la camara se desinicializa y se reabre al volver).
+
+Medido: ~16,7 fps (el `video.py` bloqueante daba ~24); la camara bloquea el loop durante cada `capture()`.
