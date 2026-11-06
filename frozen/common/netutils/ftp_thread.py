@@ -89,6 +89,12 @@ class FtpTiny:
     def start(self):
         if not self.isrunning :
             self.dorun = True
+            # Pila amplia para este hilo: bloqueado en accept()/recv() ejecuta los callbacks programados (mp_handle_pending), y en el firmware
+            # LVGL eso incluye el refresco de LVGL (TaskHandler) -> con la pila por defecto (~5 KB) da "stack overflow in task mp_thread".
+            try:
+                _thread.stack_size(24 * 1024)
+            except Exception:
+                pass
             tid = _thread.start_new_thread(runserver, (self, ))
             self.thread = tid
         else :
@@ -289,8 +295,15 @@ class FtpTiny:
         finally:
             self.isrunning = False
             self.closeclient()
-            self.datasocket.close()
-            self.ftpsocket.close()
+            # si start_listen() falla (p.ej. sin red al arrancar) los sockets pueden seguir en None: no cerrar a ciegas
+            for sk in (self.datasocket, self.ftpsocket):
+                try:
+                    if sk:
+                        sk.close()
+                except Exception:
+                    pass
+            self.datasocket = None
+            self.ftpsocket = None
             # we use up memory here, so deal with it
             gc.collect()
 
