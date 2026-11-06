@@ -29,3 +29,8 @@ backup_original_*/
 
 # Credenciales congeladas en el firmware (plantilla en templates/secrets.example.py)
 frozen/secrets.py
+
+# Firmwares compilados: llevan DENTRO las credenciales congeladas. Subirlos solo a Releases de un repo privado, a mano.
+*.bin
+*.elf
+*.uf2
