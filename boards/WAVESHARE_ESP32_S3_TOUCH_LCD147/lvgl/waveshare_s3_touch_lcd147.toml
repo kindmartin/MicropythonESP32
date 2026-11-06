@@ -1,0 +1,66 @@
+# Config de display + touch para lvgl_micropython (ver README.md de esta carpeta).
+# Pines confirmados con el esquematico oficial. Display JD9853 172x320, touch AXS5106L.
+[MCU.esp32]
+BOARD = "WAVESHARE_ESP32_S3_TOUCH_LCD147_LVGL"
+flash_size = 16
+enable_jtag_repl = 'n'
+enable_cdc_repl = 'n'
+enable_uart_repl = 'y'
+uart_repl_bitrate = 115200
+
+[SPI.Bus.spi_bus]
+host = 1
+mosi = 39
+miso = -1
+sck = 38
+
+[SPIBus.display_bus]
+spi_bus = "spi_bus"
+freq = 40000000
+dc = 45
+cs = 21
+
+[I2C.Bus.i2c_bus]
+host = 0
+scl = 41
+sda = 42
+freq = 400000
+
+[I2C.Device.indev_device]
+bus = "i2c_bus"
+dev_id = "axs5106.I2C_ADDR"
+reg_bits = "axs5106.BITS"
+
+[JD9853.display]
+data_bus = "display_bus"
+display_width = 172
+display_height = 320
+offset_x = 34
+reset_pin = 40
+reset_state = "jd9853.STATE_LOW"
+backlight_pin = 46
+backlight_on_state = "jd9853.STATE_PWM"
+color_space = "lv.COLOR_FORMAT.RGB565"
+color_byte_order = "jd9853.BYTE_ORDER_RGB"
+rgb565_byte_swap = true
+
+[JD9853.display.init]
+params = []
+
+[AXS5106.indev]
+device = "indev_device"
+reset_pin = 47
+touch_cal = "__import__('touch_fix').CAL"
+
+[display.set_color_inversion]
+params = [true]
+
+[display.set_backlight]
+params = [80]
+
+# Pila por defecto de los hilos (_thread): 5 KB no alcanza para el hilo FTP de wifiConnect con -O3 (stack overflow en mp_thread)
+[_thread.stack_size]
+params = [16384]
+
+[task_handler.TaskHandler]
+params = []

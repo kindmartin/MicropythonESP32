@@ -1,0 +1,11 @@
+{
+    "deploy": ["../deploy.md"],
+    "deploy_options": {"flash_offset": "0"},
+    "docs": "",
+    "features": ["BLE", "Display", "External Flash", "External RAM", "USB", "WiFi"],
+    "mcu": "esp32s3",
+    "product": "Waveshare ESP32-S3-LCD-1.47B",
+    "thumbnail": "",
+    "url": "https://www.waveshare.com/ESP32-S3-LCD-1.47B.htm",
+    "vendor": "Waveshare"
+}
