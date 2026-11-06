@@ -34,3 +34,6 @@ frozen/secrets.py
 *.bin
 *.elf
 *.uf2
+
+# Calibracion del cero del IMU: es de cada placa, no del repo
+imu_zero*.txt
